@@ -18,8 +18,8 @@ def find_video_id_from_url(url):
 				r'^([\w=]+)$']
 	return r1_of(patterns, url)
 
-def find_video_id_from_show_page(url):
-	return re.search(r'<div class="btnplay">.*href="([^"]+)"', get_html(url)).group(1)
+def find_video_id_from_show_page(url, proxy=None):
+	return re.search(r'<div class="btnplay">.*href="([^"]+)"', get_html(url, proxy=proxy)).group(1)
 
 def youku_url(url):
 	id = find_video_id_from_url(url)
@@ -72,15 +72,15 @@ def parse_playlist_title(url, page):
 	title = unescape_html(title)
 	return title
 
-def parse_page(url):
+def parse_page(url, proxy=None):
 	url = youku_url(url)
-	page = get_html(url)
+	page = get_html(url, proxy=proxy)
 	id2 = re.search(r"var\s+videoId2\s*=\s*'(\S+)'", page).group(1)
 	title = parse_video_title(url, page)
 	return id2, title
 
-def get_info(videoId2):
-	return json.loads(get_html('http://v.youku.com/player/getPlayList/VideoIDS/'+videoId2))
+def get_info(videoId2, proxy=None):
+	return json.loads(get_html('http://v.youku.com/player/getPlayList/VideoIDS/'+videoId2, proxy=proxy))
 
 def find_video(info, stream_type=None):
 	#key = '%s%x' % (info['data'][0]['key2'], int(info['data'][0]['key1'], 16) ^ 0xA55AA5A5)
@@ -121,18 +121,18 @@ def find_video(info, stream_type=None):
 def file_type_of_url(url):
 	return str(re.search(r'/st/([^/]+)/', url).group(1))
 
-def youku_download_by_id(id2, title, output_dir='.', stream_type=None, merge=True):
-	info = get_info(id2)
+def youku_download_by_id(id2, title, output_dir='.', stream_type=None, merge=True, proxy=None):
+	info = get_info(id2, proxy=proxy)
 	urls, sizes = zip(*find_video(info, stream_type))
 	total_size = sum(sizes)
-	download_urls(urls, title, file_type_of_url(urls[0]), total_size, output_dir, merge=merge)
+	download_urls(urls, title, file_type_of_url(urls[0]), total_size, output_dir, merge=merge, proxy=proxy)
 
-def youku_download(url, output_dir='', stream_type=None, merge=True):
+def youku_download(url, output_dir='', stream_type=None, merge=True, proxy=None):
 	id2, title = parse_page(url)
 	if type(title) == unicode:
 		title = title.encode(default_encoding)
 		title = title.replace('?', '-')
-	youku_download_by_id(id2, title, output_dir, merge=merge)
+	youku_download_by_id(id2, title, output_dir, merge=merge, proxy=proxy)
 
 def parse_playlist_videos(html):
 	return re.findall(r'id="A_(\w+)"', html)
@@ -146,28 +146,28 @@ def parse_playlist_pages(html):
 	else:
 		return []
 
-def parse_playlist(url):
-	html = get_html(url)
+def parse_playlist(url, proxy=None):
+	html = get_html(url, proxy=proxy)
 	video_id = re.search(r"var\s+videoId\s*=\s*'(\d+)'", html).group(1)
 	show_id = re.search(r'var\s+showid\s*=\s*"(\d+)"', html).group(1)
 	list_url = 'http://v.youku.com/v_vpofficiallist/page_1_showid_%s_id_%s.html?__rt=1&__ro=listShow' % (show_id, video_id)
-	html = get_html(list_url)
+	html = get_html(list_url, proxy=proxy)
 	ids = parse_playlist_videos(html)
 	for url in parse_playlist_pages(html):
-		ids.extend(parse_playlist_videos(get_html(url)))
+		ids.extend(parse_playlist_videos(get_html(url, proxy=proxy)))
 	return ids
 
-def parse_vplaylist(url):
+def parse_vplaylist(url, proxy=None):
 	id = r1_of([r'^http://www.youku.com/playlist_show/id_(\d+)(?:_ascending_\d_mode_pic(?:_page_\d+)?)?.html',
 	            r'^http://v.youku.com/v_playlist/f(\d+)o[01]p\d+.html',
 				r'^http://u.youku.com/user_playlist/pid_(\d+)_id_[\w=]+(?:_page_\d+)?.html'],
 	           url)
 	assert id, 'not valid vplaylist url: '+url
 	url = 'http://www.youku.com/playlist_show/id_%s.html' % id
-	n = int(re.search(r'<span class="num">(\d+)</span>', get_html(url)).group(1))
+	n = int(re.search(r'<span class="num">(\d+)</span>', get_html(url, proxy=proxy)).group(1))
 	return ['http://v.youku.com/v_playlist/f%so0p%s.html' % (id, i) for i in range(n)]
 
-def youku_download_playlist(url, create_dir=False, merge=True):
+def youku_download_playlist(url, create_dir=False, merge=True, proxy=None):
 	if re.match(r'http://www.youku.com/show_page/id_\w+.html', url):
 		url = find_video_id_from_show_page(url)
 	if re.match(r'http://www.youku.com/playlist_show/id_\d+(?:_ascending_\d_mode_pic(?:_page_\d+)?)?.html', url):
@@ -181,7 +181,7 @@ def youku_download_playlist(url, create_dir=False, merge=True):
 		ids = parse_playlist(url)
 	output_dir = '.'
 	if create_dir:
-		title = parse_playlist_title(url, get_html(url))
+		title = parse_playlist_title(url, get_html(url, proxy=proxy))
 		title = title.encode(default_encoding)
 		title = title.replace('?', '-')
 		import os
@@ -190,7 +190,7 @@ def youku_download_playlist(url, create_dir=False, merge=True):
 		output_dir = title
 	for i, id in enumerate(ids):
 		print 'Downloading %s of %s videos...' % (i + 1, len(ids))
-		youku_download(id, output_dir=output_dir, merge=merge)
+		youku_download(id, output_dir=output_dir, merge=merge, proxy=proxy)
 
 download = youku_download
 download_playlist = youku_download_playlist

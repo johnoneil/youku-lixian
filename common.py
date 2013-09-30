@@ -42,7 +42,11 @@ def undeflate(s):
 	import zlib
 	return zlib.decompress(s, -zlib.MAX_WBITS)
 
-def get_response(url):
+def get_response(url, proxy=None):
+	if proxy:
+		proxy = urllib2.ProxyHandler({'http': proxy})
+		opener = urllib2.build_opener(proxy)
+		urllib2.install_opener(opener)
 	response = urllib2.urlopen(url)
 	data = response.read()
 	if response.info().get('Content-Encoding') == 'gzip':
@@ -52,14 +56,14 @@ def get_response(url):
 	response.data = data
 	return response
 
-def get_html(url, encoding=None):
-	content = get_response(url).data
+def get_html(url, encoding=None, proxy=None):
+	content = get_response(url, proxy=proxy).data
 	if encoding:
 		content = content.decode(encoding)
 	return content
 
-def get_decoded_html(url):
-	response = get_response(url)
+def get_decoded_html(url, proxy=None):
+	response = get_response(url, proxy=proxy)
 	data = response.data
 	charset = r1(r'charset=([\w-]+)', response.headers['content-type'])
 	if charset:
@@ -67,11 +71,16 @@ def get_decoded_html(url):
 	else:
 		return data
 
-def url_save(url, filepath, bar, refer=None):
+def url_save(url, filepath, bar, refer=None, proxy=None):
 	headers = {}
 	if refer:
 		headers['Referer'] = refer
 	request = urllib2.Request(url, headers=headers)
+	if proxy:
+		#  proxy = urllib2.ProxyHandler({'http': '122.72.28.22:80'})
+		proxy = urllib2.ProxyHandler({'http': proxy})
+		opener = urllib2.build_opener(proxy)
+		urllib2.install_opener(opener)
 	response = urllib2.urlopen(request)
 	file_size = int(response.headers['content-length'])
 	assert file_size
@@ -97,14 +106,24 @@ def url_save(url, filepath, bar, refer=None):
 				bar.update_received(len(buffer))
 	assert received == file_size == os.path.getsize(filepath), '%s == %s == %s' % (received, file_size, os.path.getsize(filepath))
 
-def url_size(url):
+def url_size(url, proxy=None):
 	request = urllib2.Request(url)
 	request.get_method = lambda: 'HEAD'
+	if proxy:
+		#  proxy = urllib2.ProxyHandler({'http': '122.72.28.22:80'})
+		proxy = urllib2.ProxyHandler({'http': proxy})
+		opener = urllib2.build_opener(proxy)
+		urllib2.install_opener(opener)
 	response = urllib2.urlopen(request)
 	size = int(response.headers['content-length'])
 	return size
 
-def url_size(url):
+def url_size(url, proxy=None):
+	if proxy:
+		#  proxy = urllib2.ProxyHandler({'http': '122.72.28.22:80'})
+		proxy = urllib2.ProxyHandler({'http': proxy})
+		opener = urllib2.build_opener(proxy)
+		urllib2.install_opener(opener)
 	size = int(urllib2.urlopen(url).headers['content-length'])
 	return size
 
@@ -187,7 +206,7 @@ def escape_file_path(path):
 	path = path.replace('?', '-')
 	return path
 
-def download_urls(urls, title, ext, total_size, output_dir='.', refer=None, merge=True):
+def download_urls(urls, title, ext, total_size, output_dir='.', refer=None, merge=True, proxy=None):
 	assert urls
 	assert ext in ('flv', 'mp4')
 	if not total_size:
@@ -212,7 +231,7 @@ def download_urls(urls, title, ext, total_size, output_dir='.', refer=None, merg
 	if len(urls) == 1:
 		url = urls[0]
 		print 'Downloading %s ...' % filename
-		url_save(url, filepath, bar, refer=refer)
+		url_save(url, filepath, bar, refer=refer, proxy=proxy)
 		bar.done()
 	else:
 		flvs = []
@@ -223,7 +242,7 @@ def download_urls(urls, title, ext, total_size, output_dir='.', refer=None, merg
 			flvs.append(filepath)
 			#print 'Downloading %s [%s/%s]...' % (filename, i+1, len(urls))
 			bar.update_piece(i+1)
-			url_save(url, filepath, bar, refer=refer)
+			url_save(url, filepath, bar, refer=refer, proxy=proxy)
 		bar.done()
 		if not merge:
 			return
@@ -247,13 +266,13 @@ def playlist_not_supported(name):
 
 def script_main(script_name, download, download_playlist=None):
 	if download_playlist:
-		help = 'python %s.py [--playlist] [-c|--create-dir] [--no-merge] url ...' % script_name
+		help = 'python %s.py [--playlist] [-c|--create-dir] [--no-merge] [--proxy \'IP:PORT\'] url ...' % script_name
 		short_opts = 'hc'
-		opts = ['help', 'playlist', 'create-dir', 'no-merge']
+		opts = ['help', 'playlist', 'create-dir', 'no-merge', 'proxy=']
 	else:
 		help = 'python [--no-merge] %s.py url ...' % script_name
 		short_opts = 'h'
-		opts = ['help', 'no-merge']
+		opts = ['help', 'no-merge', 'proxy=']
 	import sys, getopt
 	try:
 		opts, args = getopt.getopt(sys.argv[1:], short_opts, opts)
@@ -263,6 +282,7 @@ def script_main(script_name, download, download_playlist=None):
 	playlist = False
 	create_dir = False
 	merge = True
+	proxy = None
 	for o, a in opts:
 		if o in ('-h', '--help'):
 			print help
@@ -273,6 +293,8 @@ def script_main(script_name, download, download_playlist=None):
 			create_dir = True
 		elif o in ('--no-merge'):
 			merge = False
+		elif o in ('--proxy'):
+			proxy = a
 		else:
 			print help
 			sys.exit(1)
@@ -282,7 +304,7 @@ def script_main(script_name, download, download_playlist=None):
 
 	for url in args:
 		if playlist:
-			download_playlist(url, create_dir=create_dir, merge=merge)
+			download_playlist(url, create_dir=create_dir, merge=merge, proxy=proxy)
 		else:
-			download(url, merge=merge)
+			download(url, merge=merge, proxy=proxy)
 
