@@ -247,10 +247,14 @@ def download_urls(urls, title, ext, total_size, output_dir='.', refer=None, merg
 		if not merge:
 			return
 		if ext == 'flv':
-			from flv_join import concat_flvs
-			concat_flvs(flvs, os.path.join(output_dir, title+'.flv'))
+			from flv2mp4 import convert
+			mp4s = convert(flvs)
+			from join_mp4 import concat_mp4s
+			concat_mp4s( mp4s , os.path.join(output_dir, title+'.mp4') )
 			for flv in flvs:
 				os.remove(flv)
+			for mp4 in mp4s:
+				os.remove(mp4)
 		elif ext == 'mp4':
 			from mp4_join import concat_mp4s
 			concat_mp4s(flvs, os.path.join(output_dir, title+'.mp4'))
